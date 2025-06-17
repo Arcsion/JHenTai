@@ -1,8 +1,7 @@
+import 'package:archive/archive_io.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:archive/archive.dart';
-import 'package:archive/archive_io.dart';
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
@@ -124,7 +123,7 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
         return;
       }
 
-      _generateComicInfoInDisk(archive);
+      _generateComicInfoInDisk(archive, archiveDownloadInfo.dir);
     }
 
     log.info('Begin to handle archive: ${archive.title}, original: ${archive.isOriginal}, parseSource: ${archive.parseSource}');
@@ -491,7 +490,7 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
     });
   }
 
-  Future<void> _generateComicInfoInDisk(ArchiveDownloadedData archive) async {
+  Future<void> _generateComicInfoInDisk(ArchiveDownloadedData archive, String targetDir) async {
     GalleryDetail galleryDetail;
     try {
       ({GalleryDetail galleryDetails, String apikey}) detailPageInfo = await retry(
@@ -1038,34 +1037,72 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
       return;
     }
 
-    log.info('Unpacking archive: ${archive.title}, original: ${archive.isOriginal}');
+    log.info("Unpacking archive: ${archive.title}, original: ${archive.isOriginal}");
 
-    bool success = await extractZipArchive(
-      computePackingFileDownloadPath(archive),
-      computeArchiveUnpackingPath(archive.title, archive.gid),
-    );
+    File archiveFile = File(computePackingFileDownloadPath(archive));
+    Directory targetDir = Directory(computeArchiveUnpackingPath(archive.title, archive.gid));
 
-    if (!success) {
-      log.error('Unpacking archive error!');
-      log.uploadError(Exception('Unpacking error!'), extraInfos: {'archive': archive});
-      snack('unpackingArchiveError'.tr, '${'failedToDealWith'.tr}:${archive.title}', isShort: true);
-
-      archiveDownloadInfo.archiveStatus = ArchiveStatus.downloading;
-      await archiveDownloadInfo.downloadTask!.dispose();
-      archiveDownloadInfo.downloadTask = null;
-      await _deletePackingFileInDisk(archive);
-      return pauseDownloadArchive(archive.gid);
+    if (!await archiveFile.exists()) {
+      log.error("Archive file not found: ${archiveFile.path}");
+      await _updateArchiveStatus(archive.gid, ArchiveStatus.unpackFailed);
+      return;
     }
 
-    if (downloadSetting.deleteArchiveFileAfterDownload.isTrue) {
-      _deletePackingFileInDisk(archive);
+    /// Create a temporary directory for extraction
+    Directory tempDir = Directory(join(targetDir.path, 'temp_unpacking_${archive.gid}'));
+    if (await tempDir.exists()) {
+      await tempDir.delete(recursive: true);
     }
+    await tempDir.create(recursive: true);
 
-    await _saveArchiveInfoInDisk(archive);
+    try {
+      /// Read the archive file
+      final bytes = await archiveFile.readAsBytes();
+      final archiveData = ZipDecoder().decodeBytes(bytes);
 
-    await _updateArchiveStatus(archive.gid, ArchiveStatus.completed);
+      /// Extract all files to the temporary directory
+      for (final file in archiveData) {
+        final filename = join(tempDir.path, file.name);
+        if (file.isFile) {
+          File(filename)
+            ..createSync(recursive: true)
+            ..writeAsBytesSync(file.content as List<int>);
+        } else {
+          Directory(filename).create(recursive: true);
+        }
+      }
 
-    _tryWakeWaitingTasks();
+      /// Generate ComicInfo.xml and metadata files in the temporary directory
+      await _generateComicInfoInDisk(archive, tempDir.path);
+
+      /// Create a new ZIP archive including all contents from the temporary directory
+      final newZipEncoder = ZipFileEncoder();
+      final newZipPath = join(targetDir.path, '${archive.gid}.zip');
+      newZipEncoder.create(newZipPath);
+
+      await for (FileSystemEntity entity in tempDir.list(recursive: true)) {
+        if (entity is File) {
+          String relativePath = relative(entity.path, from: tempDir.path);
+          newZipEncoder.addFile(entity, relativePath);
+        } else if (entity is Directory) {
+          String relativePath = relative(entity.path, from: tempDir.path);
+          newZipEncoder.addDirectory(entity, relativePath);
+        }
+      }
+      newZipEncoder.close();
+
+      /// Delete the temporary directory and the original downloaded archive file
+      await tempDir.delete(recursive: true);
+      await archiveFile.delete();
+
+      await _updateArchiveStatus(archive.gid, ArchiveStatus.completed);
+    } catch (e) {
+      log.error("Unpacking archive failed: ${archive.title}, reason: $e");
+      await _updateArchiveStatus(archive.gid, ArchiveStatus.unpackFailed);
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    }
   }
 
   // ALL
@@ -1331,40 +1368,11 @@ enum ArchiveParseSource {
   }
 }
 
-/// After archive download is completed, pack all files into a ZIP file.
-Future<void> _packArchiveFilesIntoZip(ArchiveDownloadedData archive) async {
-  Directory archiveDir = Directory(join(downloadSetting.downloadPath.value, archive.title));
-  if (!await archiveDir.exists()) {
-    return;
-  }
+import 'package:archive/archive_io.dart';
 
-  // Create a ZIP file with the archive's ID as the name.
-  String zipFilePath = join(archiveDir.path, '${archive.gid}.zip');
-  ZipFileEncoder encoder = ZipFileEncoder();
-  encoder.create(zipFilePath);
 
-  // Add all files in the directory to the ZIP file.
-  await for (FileSystemEntity entity in archiveDir.list()) {
-    if (entity is File) {
-      encoder.addFile(entity);
-    }
-  }
+import 'package:archive/archive_io.dart';
 
-  // Close the ZIP file.
-  encoder.close();
 
-  // Delete all original files except the ZIP file.
-  await for (FileSystemEntity entity in archiveDir.list()) {
-    if (entity is File && entity.path != zipFilePath) {
-      await entity.delete();
-    }
-  }
-}
+import 'package:archive/archive_io.dart';
 
-/// Update the download completion logic to call the ZIP packing function.
-Future<void> _onArchiveDownloadComplete(ArchiveDownloadedData archive) async {
-
-  // Pack all files into a ZIP file.
-  await _packArchiveFilesIntoZip(archive);
-
-}
