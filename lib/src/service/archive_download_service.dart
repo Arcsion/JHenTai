@@ -1079,11 +1079,15 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
       await for (FileSystemEntity entity in tempDir.list(recursive: true)) {
         if (entity is File) {
           String relativePath = relative(entity.path, from: tempDir.path);
-          newZipEncoder.addFile(File(entity.path), relativePath);
+          File file = File(entity.path);
+          await file.rename(join(tempDir.path, relativePath));
+          newZipEncoder.addFile(file);
         } else if (entity is Directory) {
           String relativePath = relative(entity.path, from: tempDir.path);
           if (relativePath.isNotEmpty) {  // 只添加非根目录
-            newZipEncoder.addDirectory(Directory(entity.path), relativePath);
+            Directory dir = Directory(entity.path);
+            await dir.rename(join(tempDir.path, relativePath));
+            newZipEncoder.addDirectory(dir);
           }
         }
       }
