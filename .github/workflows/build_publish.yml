@@ -34,9 +34,9 @@ jobs:
         uses: actions/checkout@v3
       
       # Add JHenTai api secret
-      - name: Setup JHenTai API Secret
-        run: |
-          echo "class JHApiSecretConfig {\n  static const secret = 'api_key_skipped';\n}" > lib/src/config/jh_api_secret_config.dart
+      # - name: Setup JHenTai API Secret
+      #   run: |
+      #     echo "class JHApiSecretConfig {\n  static const secret = 'api_key_skipped';\n}" > lib/src/config/jh_api_secret_config.dart
       
       # Setup Flutter
       - name: Setup Flutter
