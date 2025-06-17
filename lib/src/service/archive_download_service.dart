@@ -121,9 +121,7 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
       }
       if (!await _initArchiveInfo(archive)) {
         return;
-      }
-
-      _generateComicInfoInDisk(archive, archiveDownloadInfo.dir);
+      }      _generateComicInfoInDisk(archive, computeArchiveUnpackingPath(archive.title, archive.gid));
     }
 
     log.info('Begin to handle archive: ${archive.title}, original: ${archive.isOriginal}, parseSource: ${archive.parseSource}');
@@ -1078,15 +1076,13 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
       /// Create a new ZIP archive including all contents from the temporary directory
       final newZipEncoder = ZipFileEncoder();
       final newZipPath = join(targetDir.path, '${archive.gid}.zip');
-      newZipEncoder.create(newZipPath);
-
-      await for (FileSystemEntity entity in tempDir.list(recursive: true)) {
+      newZipEncoder.create(newZipPath);      await for (FileSystemEntity entity in tempDir.list(recursive: true)) {
         if (entity is File) {
           String relativePath = relative(entity.path, from: tempDir.path);
-          newZipEncoder.addFile(entity, relativePath);
+          newZipEncoder.addFile(File(entity.path));
         } else if (entity is Directory) {
           String relativePath = relative(entity.path, from: tempDir.path);
-          newZipEncoder.addDirectory(entity, relativePath);
+          newZipEncoder.addDirectory(Directory(entity.path));
         }
       }
       newZipEncoder.close();
@@ -1330,6 +1326,7 @@ enum ArchiveStatus {
   downloaded(70),
   unpacking(80),
   completed(90),
+  unpackFailed(100),
   ;
 
   final int code;
@@ -1367,12 +1364,4 @@ enum ArchiveParseSource {
     return ArchiveParseSource.values.firstWhere((s) => s.code == code);
   }
 }
-
-import 'package:archive/archive_io.dart';
-
-
-import 'package:archive/archive_io.dart';
-
-
-import 'package:archive/archive_io.dart';
 
