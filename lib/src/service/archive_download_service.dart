@@ -1328,3 +1328,41 @@ enum ArchiveParseSource {
     return ArchiveParseSource.values.firstWhere((s) => s.code == code);
   }
 }
+
+/// After archive download is completed, pack all files into a ZIP file.
+Future<void> _packArchiveFilesIntoZip(ArchiveDownloadedData archive) async {
+  Directory archiveDir = Directory(join(downloadSetting.downloadPath.value, archive.folderName));
+  if (!await archiveDir.exists()) {
+    return;
+  }
+
+  // Create a ZIP file with the archive's ID as the name.
+  String zipFilePath = join(archiveDir.path, '${archive.gid}.zip');
+  ZipFileEncoder encoder = ZipFileEncoder();
+  encoder.create(zipFilePath);
+
+  // Add all files in the directory to the ZIP file.
+  await for (FileSystemEntity entity in archiveDir.list()) {
+    if (entity is File) {
+      encoder.addFile(entity);
+    }
+  }
+
+  // Close the ZIP file.
+  encoder.close();
+
+  // Delete all original files except the ZIP file.
+  await for (FileSystemEntity entity in archiveDir.list()) {
+    if (entity is File && entity.path != zipFilePath) {
+      await entity.delete();
+    }
+  }
+}
+
+/// Update the download completion logic to call the ZIP packing function.
+Future<void> _onArchiveDownloadComplete(ArchiveDownloadedData archive) async {
+
+  // Pack all files into a ZIP file.
+  await _packArchiveFilesIntoZip(archive);
+
+}
