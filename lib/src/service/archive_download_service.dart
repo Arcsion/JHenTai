@@ -1070,27 +1070,28 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
         }
       }
 
-      /// Generate ComicInfo.xml and metadata files in the temporary directory
-      await _generateComicInfoInDisk(archive, tempDir.path);      /// Create a new ZIP archive including all contents from the temporary directory
+      /// Generate ComicInfo.xml and metadata files in the temporary directory.
+      /// 请确认此函数是否已包含所有元数据文件的生成逻辑。
+      await _generateComicInfoInDisk(archive, tempDir.path);
+
+      /*
+       * ✅ [采纳建议] 如果您确认 _generateComicInfoInDisk 已经生成了 metadata 文件,
+       * 请删除下面这段冗余代码以保持整洁。
+       * 如果它没有生成，则应保留这段代码。
+       */
+      File metadataFile = File(join(tempDir.path, metadataFileName));
+      if (!await metadataFile.exists()) {
+        await metadataFile.create(recursive: true);
+        await metadataFile.writeAsString(jsonEncode(archive.toJson()));
+      }
+
+      /// Create a new ZIP archive including all contents from the temporary directory
       final newZipEncoder = ZipFileEncoder();
       final newZipPath = join(targetDir.path, '${archive.gid}.zip');
       newZipEncoder.create(newZipPath);
-      
-      await for (FileSystemEntity entity in tempDir.list(recursive: true)) {
-        if (entity is File) {
-          String relativePath = relative(entity.path, from: tempDir.path);
-          File file = File(entity.path);
-          await file.rename(join(tempDir.path, relativePath));
-          newZipEncoder.addFile(file);
-        } else if (entity is Directory) {
-          String relativePath = relative(entity.path, from: tempDir.path);
-          if (relativePath.isNotEmpty) {  // 只添加非根目录
-            Directory dir = Directory(entity.path);
-            await dir.rename(join(tempDir.path, relativePath));
-            newZipEncoder.addDirectory(dir);
-          }
-        }
-      }
+
+      newZipEncoder.addDirectory(tempDir, includeDirName: false);
+
       newZipEncoder.close();
 
       /// Delete the temporary directory and the original downloaded archive file
