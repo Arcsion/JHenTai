@@ -1071,18 +1071,20 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
       }
 
       /// Generate ComicInfo.xml and metadata files in the temporary directory
-      await _generateComicInfoInDisk(archive, tempDir.path);
-
-      /// Create a new ZIP archive including all contents from the temporary directory
+      await _generateComicInfoInDisk(archive, tempDir.path);      /// Create a new ZIP archive including all contents from the temporary directory
       final newZipEncoder = ZipFileEncoder();
       final newZipPath = join(targetDir.path, '${archive.gid}.zip');
-      newZipEncoder.create(newZipPath);      await for (FileSystemEntity entity in tempDir.list(recursive: true)) {
+      newZipEncoder.create(newZipPath);
+      
+      await for (FileSystemEntity entity in tempDir.list(recursive: true)) {
         if (entity is File) {
           String relativePath = relative(entity.path, from: tempDir.path);
-          newZipEncoder.addFile(File(entity.path));
+          newZipEncoder.addFile(File(entity.path), relativePath);
         } else if (entity is Directory) {
           String relativePath = relative(entity.path, from: tempDir.path);
-          newZipEncoder.addDirectory(Directory(entity.path));
+          if (relativePath.isNotEmpty) {  // 只添加非根目录
+            newZipEncoder.addDirectory(Directory(entity.path), relativePath);
+          }
         }
       }
       newZipEncoder.close();
