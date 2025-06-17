@@ -36,7 +36,7 @@ jobs:
       # Add JHenTai api secret
       - name: Setup JHenTai API Secret
         run: |
-          echo "api_key_skipped" > lib/src/config/jh_api_secret_config.dart
+          echo "class JHApiSecretConfig {\n  static const secret = 'api_key_skipped';\n}" > lib/src/config/jh_api_secret_config.dart
       
       # Setup Flutter
       - name: Setup Flutter

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
@@ -1331,7 +1333,7 @@ enum ArchiveParseSource {
 
 /// After archive download is completed, pack all files into a ZIP file.
 Future<void> _packArchiveFilesIntoZip(ArchiveDownloadedData archive) async {
-  Directory archiveDir = Directory(join(downloadSetting.downloadPath.value, archive.folderName));
+  Directory archiveDir = Directory(join(downloadSetting.downloadPath.value, archive.title));
   if (!await archiveDir.exists()) {
     return;
   }
