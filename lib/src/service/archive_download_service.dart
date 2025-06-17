@@ -520,7 +520,12 @@ class ArchiveDownloadService extends GetxController with GridBasePageServiceMixi
     );
 
     try {
-      File file = File(join(computeArchiveUnpackingPath(archive.title, archive.gid), 'ComicInfo.xml'));
+      // 错误原因：下面这行代码忽略了传入的 `targetDir` 参数。
+      // File file = File(join(computeArchiveUnpackingPath(archive.title, archive.gid), 'ComicInfo.xml'));
+      
+      // ✅ 修复后：使用传入的 targetDir 参数来构建文件路径
+      File file = File(join(targetDir, 'ComicInfo.xml'));
+      
       if (!await file.exists()) {
         await file.create(recursive: true);
       }
